@@ -1,0 +1,712 @@
+{
+  "info": {
+    "name": "SanaEsencia - ms-reservas",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Reservas, agenda y boxes. La suite requiere los tres microservicios y una cuenta ADMIN activa. Crea datos E2E ficticios y los desactiva o cancela al terminar."
+  },
+  "variable": [
+    {
+      "key": "reservasUrl",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "usuariosUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "catalogoUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin.prueba@example.com"
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "correo",
+      "value": ""
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "servicioId",
+      "value": "1"
+    },
+    {
+      "key": "especialistaId",
+      "value": "1"
+    },
+    {
+      "key": "reservaId",
+      "value": "1"
+    },
+    {
+      "key": "boxId",
+      "value": "1"
+    },
+    {
+      "key": "fecha",
+      "value": ""
+    },
+    {
+      "key": "mes",
+      "value": ""
+    },
+    {
+      "key": "inicio",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Suite integrada - requiere usuarios y catálogo activos",
+      "request": {
+        "method": "GET",
+        "url": "{{reservasUrl}}/api/estado",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Prueba integrada: requiere usuarios, catálogo y reservas, y 3 boxes activos.",
+              "// Solo crea cuentas/perfiles/reservas ficticios E2E. Conserva el historial cancelado.",
+              "const ur=pm.variables.get(\"usuariosUrl\")||\"http://localhost:8080\";",
+              "const ca=pm.variables.get(\"catalogoUrl\")||\"http://localhost:8081\";",
+              "const re=pm.variables.get(\"reservasUrl\")||\"http://localhost:8082\";",
+              "const correoAdmin=pm.variables.get(\"adminEmail\");",
+              "const claveAdmin=pm.variables.get(\"adminPassword\");",
+              "pm.test(\"Reservas funciona\",()=>pm.response.to.have.status(200));",
+              "const Buffer=require(\"buffer\").Buffer;",
+              "const auth=(u,p)=>\"Basic \"+Buffer.from(u+\":\"+p).toString(\"base64\");",
+              "async function pedir(nombre,method,url,estado,body,credencial) {",
+              "    const request={url,method,header:{}};",
+              "    if(credencial)request.header.Authorization=credencial;",
+              "    if(body!==undefined) {",
+              "        request.header[\"Content-Type\"]=\"application/json\";",
+              "        request.body={mode:\"raw\",raw:JSON.stringify(body)};",
+              "    }",
+              "    const response=await pm.sendRequest(request);",
+              "    const estados=Array.isArray(estado)?estado:[estado];",
+              "    pm.test(nombre+\" -> \"+estados.join(\"/\"),()=>pm.expect(estados).to.include(response.code));",
+              "    if(response.code>=500)throw Error(nombre+\": servicio no disponible\");",
+              "    return response;",
+              "}",
+              "const dato=r=>r.json();",
+              "function run(numero) {",
+              "    let n=numero,m=2,suma=0;",
+              "    while(n>0){suma+=(n%10)*m;n=Math.floor(n/10);m=m===7?2:m+1;}",
+              "    const dv=11-suma%11;",
+              "    return numero+\"-\"+(dv===11?\"0\":dv===10?\"K\":dv);",
+              "}",
+              "async function ejecutar() {",
+              "    if(!correoAdmin||!claveAdmin)throw Error(\"Configura adminEmail y adminPassword\");",
+              "    const admin=auth(correoAdmin,claveAdmin);",
+              "    const marca=Date.now().toString();",
+              "    const clave=\"PruebaReserva\"+marca+\"!\";",
+              "    const usuarios=[],perfiles=[],reservas=[];",
+              "    let servicioId;",
+              "    const fecha=new Date(Date.now()+7*86400000).toISOString().slice(0,10);",
+              "    const mes=fecha.slice(0,7);",
+              "    const dias=[\"MONDAY\",\"TUESDAY\",\"WEDNESDAY\",\"THURSDAY\",\"FRIDAY\",\"SATURDAY\",\"SUNDAY\"];",
+              "    const agenda={horarios:dias.map(dia=>({dia,desde:\"09:00\",hasta:\"18:00\"}))};",
+              "    const cuerpo=(perfil,hora,modalidad)=>({servicioId,especialistaId:perfil,",
+              "        inicio:fecha+\"T\"+hora+\":00\",modalidad,latitud:-33.45,longitud:-70.66});",
+              "    async function reservar(indice,perfil,hora,modalidad) {",
+              "        const r=await pedir(\"Reservar paciente \"+(indice+1),\"POST\",re+\"/api/reservas\",201,",
+              "            cuerpo(perfil,hora,modalidad),usuarios[indice].auth);",
+              "        if(r.code!==201)throw Error(\"No se pudo crear la reserva de prueba\");",
+              "        const item={id:dato(r).id,auth:usuarios[indice].auth,activa:true};",
+              "        reservas.push(item);",
+              "        return {registro:item,datos:dato(r)};",
+              "    }",
+              "    async function cancelar(item) {",
+              "        if(!item.activa)return;",
+              "        await pedir(\"Cancelar cita E2E propia\",\"DELETE\",re+\"/api/reservas/\"+item.id,204,undefined,item.auth);",
+              "        item.activa=false;",
+              "    }",
+              "    try {",
+              "        const login=await pedir(\"Admin válido en usuarios\",\"POST\",ur+\"/api/usuarios/login\",200,",
+              "            {correo:correoAdmin,password:claveAdmin});",
+              "        if(login.code!==200||dato(login).rol!==\"ADMIN\")throw Error(\"Se requiere una cuenta ADMIN activa\");",
+              "        await pedir(\"Sin credenciales no se ven citas\",\"GET\",re+\"/api/reservas\",401);",
+              "        const boxes=await pedir(\"Boxes iniciales\",\"GET\",re+\"/api/boxes\",200,undefined,admin);",
+              "        pm.test(\"Tres boxes activos de demostración\",()=>pm.expect(dato(boxes).length).to.equal(3));",
+              "        const servicio=await pedir(\"Crear servicio E2E en catálogo\",\"POST\",ca+\"/api/servicios\",201,",
+              "            {nombre:\"E2E Reservas \"+marca,descripcion:\"Servicio ficticio para pruebas\",precio:30000,",
+              "             duracionMinutos:60,permiteOnline:true},admin);",
+              "        if(servicio.code!==201)throw Error(\"No se pudo preparar catálogo\");",
+              "        servicioId=dato(servicio).id;",
+              "        for(let i=0;i<5;i++) {",
+              "            const p=await pedir(\"Crear perfil E2E \"+(i+1),\"POST\",ca+\"/api/especialistas\",201,",
+              "                {nombre:\"E2E Reservas \"+marca+\" Profesional \"+(i+1),especialidad:\"Pruebas\",",
+              "                 descripcion:\"Perfil ficticio de integración\",permitePresencial:true,permiteOnline:true,",
+              "                 servicioIds:[servicioId]},admin);",
+              "            if(p.code!==201)throw Error(\"No se pudo preparar el perfil\");",
+              "            perfiles.push(dato(p).id);",
+              "            await pedir(\"Configurar disponibilidad del perfil \"+(i+1),\"PUT\",re+\"/api/agenda/\"+perfiles[i],200,agenda,admin);",
+              "        }",
+              "        const numeroBase=70000000+(Number(marca.slice(-6))*5)%9000000;",
+              "        for(let i=0;i<5;i++) {",
+              "            const correo=\"reservas.e2e.\"+marca+\".\"+i+\"@example.com\";",
+              "            const u=await pedir(\"Crear cuenta ficticia \"+(i+1),\"POST\",ur+\"/api/usuarios/registro\",201,",
+              "                {nombre:\"Prueba\",apellido:\"Reservas \"+(i+1),run:run(numeroBase+i),correo,password:clave});",
+              "            if(u.code!==201)throw Error(\"No se pudo crear la cuenta ficticia\");",
+              "            usuarios.push({id:dato(u).id,auth:auth(correo,clave)});",
+              "        }",
+              "        const especialista=usuarios[4];",
+              "        await pedir(\"Vincular cuenta a perfil especialista\",\"PATCH\",ur+\"/api/admin/usuarios/\"+especialista.id+\"/rol\",",
+              "            200,{rol:\"ESPECIALISTA\",especialistaId:perfiles[0]},admin);",
+              "        await pedir(\"Paciente no cambia agenda\",\"PUT\",re+\"/api/agenda/\"+perfiles[0],403,agenda,usuarios[0].auth);",
+              "        await pedir(\"Especialista modifica su propia agenda\",\"PUT\",re+\"/api/agenda/\"+perfiles[0],200,agenda,especialista.auth);",
+              "        await pedir(\"Especialista no modifica otra agenda\",\"PUT\",re+\"/api/agenda/\"+perfiles[1],403,agenda,especialista.auth);",
+              "        const sugerencia=await pedir(\"Sugerir online por distancia\",\"GET\",",
+              "            re+\"/api/ubicacion/sugerencia?especialistaId=\"+perfiles[0]+\"&servicioId=\"+servicioId+",
+              "            \"&latitud=-33.45&longitud=-70.66\",200,undefined,usuarios[0].auth);",
+              "        pm.test(\"Más de 20 km ofrece online\",()=>pm.expect(dato(sugerencia).sugiereOnline).to.equal(true));",
+              "        const cerca=await pedir(\"Ubicación en la sede\",\"GET\",re+\"/api/ubicacion/sugerencia?especialistaId=\"+",
+              "            perfiles[0]+\"&servicioId=\"+servicioId+\"&latitud=-31.909825&longitud=-71.512501\",200,undefined,usuarios[0].auth);",
+              "        pm.test(\"La sede no se considera lejana\",()=>pm.expect(dato(cerca).sugiereOnline).to.equal(false));",
+              "        await pedir(\"Coordenadas inválidas\",\"GET\",re+\"/api/ubicacion/sugerencia?especialistaId=\"+perfiles[0]+",
+              "            \"&servicioId=\"+servicioId+\"&latitud=999&longitud=0\",400,undefined,usuarios[0].auth);",
+              "        const a=await reservar(0,perfiles[0],\"09:00\",\"PRESENCIAL\");",
+              "        const b=await reservar(1,perfiles[1],\"09:00\",\"PRESENCIAL\");",
+              "        const c=await reservar(2,perfiles[2],\"09:00\",\"PRESENCIAL\");",
+              "        pm.test(\"Boxes distintos para citas simultáneas\",()=>pm.expect(new Set(",
+              "            [a.datos.boxId,b.datos.boxId,c.datos.boxId]).size).to.equal(3));",
+              "        pm.test(\"Precio y duración los determina catálogo\",()=>{",
+              "            pm.expect(Number(a.datos.precio)).to.equal(30000);",
+              "            pm.expect(a.datos.fin).to.equal(fecha+\"T10:00:00\");",
+              "            pm.expect(a.datos.boxNombre).to.be.a(\"string\");",
+              "        });",
+              "        await pedir(\"No sobreocupar boxes\",\"POST\",re+\"/api/reservas\",409,",
+              "            cuerpo(perfiles[3],\"09:00\",\"PRESENCIAL\"),usuarios[3].auth);",
+              "        const online=await reservar(3,perfiles[3],\"09:00\",\"ONLINE\");",
+              "        pm.test(\"Online no ocupa box\",()=>pm.expect(online.datos.boxId).to.equal(null));",
+              "        await pedir(\"Especialista ocupado\",\"POST\",re+\"/api/reservas\",409,",
+              "            cuerpo(perfiles[0],\"09:30\",\"ONLINE\"),usuarios[1].auth);",
+              "        await pedir(\"Paciente ocupado con otro especialista\",\"POST\",re+\"/api/reservas\",409,",
+              "            cuerpo(perfiles[4],\"09:30\",\"ONLINE\"),usuarios[0].auth);",
+              "        await pedir(\"No leer citas de otro paciente\",\"GET\",re+\"/api/reservas/\"+a.registro.id,403,undefined,usuarios[1].auth);",
+              "        await pedir(\"No cancelar citas ajenas\",\"DELETE\",re+\"/api/reservas/\"+a.registro.id,403,undefined,usuarios[1].auth);",
+              "        const mensual=await pedir(\"Vista mensual de especialista\",\"GET\",re+\"/api/reservas?mes=\"+mes,200,undefined,especialista.auth);",
+              "        pm.test(\"El especialista solo ve su perfil\",()=> {",
+              "            pm.expect(dato(mensual).some(r=>r.id===a.registro.id)).to.equal(true);",
+              "            pm.expect(dato(mensual).every(r=>r.especialistaId===perfiles[0])).to.equal(true);",
+              "        });",
+              "        const mensualPaciente=await pedir(\"Vista mensual del paciente\",\"GET\",re+\"/api/reservas?mes=\"+mes,200,undefined,usuarios[1].auth);",
+              "        pm.test(\"El paciente solo ve sus citas\",()=>pm.expect(dato(mensualPaciente).every(r=>r.pacienteId===usuarios[1].id)).to.equal(true));",
+              "        await pedir(\"Box con cita no se desactiva\",\"PATCH\",re+\"/api/admin/boxes/\"+a.datos.boxId+\"/estado\",",
+              "            409,{activo:false},admin);",
+              "        await cancelar(a.registro);",
+              "        const presencial=await pedir(\"Box liberado sirve al reprogramar\",\"PUT\",re+\"/api/reservas/\"+online.registro.id,",
+              "            200,cuerpo(perfiles[3],\"09:00\",\"PRESENCIAL\"),usuarios[3].auth);",
+              "        pm.test(\"Reutiliza el único box que quedó libre\",()=>pm.expect(dato(presencial).boxId).to.equal(a.datos.boxId));",
+              "        await pedir(\"Cambiar cita a online y otra hora\",\"PUT\",re+\"/api/reservas/\"+online.registro.id,",
+              "            200,cuerpo(perfiles[3],\"10:00\",\"ONLINE\"),usuarios[3].auth);",
+              "        await pedir(\"Horario fuera de agenda\",\"POST\",re+\"/api/reservas\",409,cuerpo(perfiles[4],\"08:00\",\"ONLINE\"),usuarios[0].auth);",
+              "        await pedir(\"Inicio fuera de grilla\",\"POST\",re+\"/api/reservas\",400,cuerpo(perfiles[4],\"09:15\",\"ONLINE\"),usuarios[0].auth);",
+              "        await pedir(\"Datos de reserva incompletos\",\"POST\",re+\"/api/reservas\",400,{},usuarios[0].auth);",
+              "        await pedir(\"Admin no suplanta un paciente\",\"POST\",re+\"/api/reservas\",403,cuerpo(perfiles[4],\"12:00\",\"ONLINE\"),admin);",
+              "        await pedir(\"Reserva inexistente\",\"GET\",re+\"/api/reservas/9223372036854775807\",404,undefined,usuarios[0].auth);",
+              "        await pedir(\"Mes inválido\",\"GET\",re+\"/api/reservas?mes=incorrecto\",400,undefined,usuarios[0].auth);",
+              "        const disponibilidad=await pedir(\"Consultar disponibilidad restante\",\"GET\",re+\"/api/disponibilidad?especialistaId=\"+",
+              "            perfiles[0]+\"&servicioId=\"+servicioId+\"&fecha=\"+fecha+\"&modalidad=PRESENCIAL\",200,undefined,usuarios[0].auth);",
+              "        pm.test(\"Cancelar vuelve a ofrecer la hora\",()=>pm.expect(dato(disponibilidad).some(t=>t.inicio===fecha+\"T09:00:00\")).to.equal(true));",
+              "        const respuestas=await Promise.all([0,1].map(i=>pm.sendRequest({",
+              "            url:re+\"/api/reservas\",method:\"POST\",header:{\"Content-Type\":\"application/json\",Authorization:usuarios[i].auth},",
+              "            body:{mode:\"raw\",raw:JSON.stringify(cuerpo(perfiles[4],\"15:00\",\"PRESENCIAL\"))}",
+              "        })));",
+              "        pm.test(\"Concurrencia: una reserva gana y otra recibe 409\",()=>",
+              "            pm.expect(respuestas.map(r=>r.code).sort()).to.deep.equal([201,409]));",
+              "        respuestas.forEach((r,i)=>{if(r.code===201)reservas.push({id:dato(r).id,auth:usuarios[i].auth,activa:true});});",
+              "        for(const r of reservas)await cancelar(r);",
+              "        const cancelada=await pedir(\"Consulta conserva historial cancelado\",\"GET\",re+\"/api/reservas/\"+a.registro.id,",
+              "            200,undefined,usuarios[0].auth);",
+              "        pm.test(\"La cita cancelada conserva su registro\",()=>pm.expect(dato(cancelada).estado).to.equal(\"CANCELADA\"));",
+              "    } finally {",
+              "        for(const r of reservas) if(r.activa) {",
+              "            try{await cancelar(r);}catch(e){pm.test(\"Limpiar reserva E2E \"+r.id,()=>{throw e;});}",
+              "        }",
+              "        for(const id of perfiles) await pedir(\"Pausar perfil E2E\",\"DELETE\",ca+\"/api/especialistas/\"+id,204,undefined,admin);",
+              "        if(servicioId)await pedir(\"Desactivar servicio E2E\",\"DELETE\",ca+\"/api/servicios/\"+servicioId,204,undefined,admin);",
+              "        for(const u of usuarios)await pedir(\"Desactivar cuenta ficticia\",\"DELETE\",ur+\"/api/usuarios/\"+u.id,204,undefined,admin);",
+              "    }",
+              "}",
+              "ejecutar().catch(e=>pm.test(\"Suite integrada finalizada\",()=>{throw e;}));",
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reservas",
+      "item": [
+        {
+          "name": "Crear como paciente",
+          "request": {
+            "method": "POST",
+            "url": "{{reservasUrl}}/api/reservas",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"servicioId\": \"{{servicioId}}\",\n  \"especialistaId\": \"{{especialistaId}}\",\n  \"inicio\": \"{{inicio}}\",\n  \"modalidad\": \"PRESENCIAL\",\n  \"latitud\": -33.45,\n  \"longitud\": -70.66\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Ver mis citas del mes",
+          "request": {
+            "method": "GET",
+            "url": "{{reservasUrl}}/api/reservas?mes={{mes}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Consultar cita",
+          "request": {
+            "method": "GET",
+            "url": "{{reservasUrl}}/api/reservas/{{reservaId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Reprogramar",
+          "request": {
+            "method": "PUT",
+            "url": "{{reservasUrl}}/api/reservas/{{reservaId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"servicioId\": \"{{servicioId}}\",\n  \"especialistaId\": \"{{especialistaId}}\",\n  \"inicio\": \"{{inicio}}\",\n  \"modalidad\": \"PRESENCIAL\",\n  \"latitud\": -33.45,\n  \"longitud\": -70.66\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Cancelar conservando historial",
+          "request": {
+            "method": "DELETE",
+            "url": "{{reservasUrl}}/api/reservas/{{reservaId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Marcar atendida como especialista o admin",
+          "request": {
+            "method": "PATCH",
+            "url": "{{reservasUrl}}/api/reservas/{{reservaId}}/estado",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"ATENDIDA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Agenda y distancia",
+      "item": [
+        {
+          "name": "Consultar horario semanal",
+          "request": {
+            "method": "GET",
+            "url": "{{reservasUrl}}/api/agenda/{{especialistaId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Configurar agenda propia o como admin",
+          "request": {
+            "method": "PUT",
+            "url": "{{reservasUrl}}/api/agenda/{{especialistaId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"horarios\": [\n    {\n      \"dia\": \"MONDAY\",\n      \"desde\": \"09:00\",\n      \"hasta\": \"18:00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Ver horas disponibles",
+          "request": {
+            "method": "GET",
+            "url": "{{reservasUrl}}/api/disponibilidad?especialistaId={{especialistaId}}&servicioId={{servicioId}}&fecha={{fecha}}&modalidad=PRESENCIAL",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Sugerir online desde ubicación lejana",
+          "request": {
+            "method": "GET",
+            "url": "{{reservasUrl}}/api/ubicacion/sugerencia?especialistaId={{especialistaId}}&servicioId={{servicioId}}&latitud=-33.45&longitud=-70.66",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Boxes",
+      "item": [
+        {
+          "name": "Listar boxes activos",
+          "request": {
+            "method": "GET",
+            "url": "{{reservasUrl}}/api/boxes",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Admin listar todos",
+          "request": {
+            "method": "GET",
+            "url": "{{reservasUrl}}/api/admin/boxes",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Admin crear box",
+          "request": {
+            "method": "POST",
+            "url": "{{reservasUrl}}/api/admin/boxes",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Box de ejemplo\",\n  \"descripcion\": \"Consulta presencial\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Admin actualizar box",
+          "request": {
+            "method": "PUT",
+            "url": "{{reservasUrl}}/api/admin/boxes/{{boxId}}",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Box de ejemplo\",\n  \"descripcion\": \"Consulta presencial\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Admin cambiar estado",
+          "request": {
+            "method": "PATCH",
+            "url": "{{reservasUrl}}/api/admin/boxes/{{boxId}}/estado",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{correo}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activo\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
