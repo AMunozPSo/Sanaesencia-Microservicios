@@ -62,7 +62,7 @@ public class ReservaService {
         LocalDateTime inicio=solicitud.inicio(),fin=inicio.plusMinutes(atencion.servicio().duracionMinutos());
         if(!inicio.isAfter(LocalDateTime.now(reloj)))
             throw error(HttpStatus.BAD_REQUEST,"La reserva debe ser futura");
-        if(!agenda.enGrilla(inicio.toLocalTime()))
+        if(!agenda.enGrilla(inicio.toLocalTime())&&!agenda.inicioPublicado(solicitud.especialistaId(),inicio))
             throw error(HttpStatus.BAD_REQUEST,"El inicio debe usar intervalos de "+agenda.pasoMinutos()+" minutos, sin segundos");
         if(!agenda.admite(solicitud.especialistaId(),inicio,fin))
             throw error(HttpStatus.CONFLICT,"El horario no está dentro de la agenda del especialista");
@@ -87,25 +87,35 @@ public class ReservaService {
     }
 
     @Transactional(readOnly=true)
-    public List<Turno> disponibilidad(Long especialistaId,Long servicioId,LocalDate fecha,Modalidad modalidad,Cuenta cuenta) {
+    public List<Turno> disponibilidad(Long especialistaId,Long servicioId,LocalDate fecha,Modalidad modalidad,Cuenta cuenta,Long reservaId) {
+        if(reservaId!=null) {
+            Reserva propia=buscar(reservaId);
+            reglas.ver(cuenta,propia);
+            if(!cuenta.esPaciente()&&!cuenta.esAdmin())
+                throw error(HttpStatus.FORBIDDEN,"Solo el paciente o admin puede reprogramar esta reserva");
+            if(propia.estado!=EstadoReserva.CONFIRMADA||!propia.inicio.isAfter(LocalDateTime.now(reloj)))
+                throw error(HttpStatus.CONFLICT,"Solo se puede reprogramar una reserva confirmada futura");
+        }
         var atencion=catalogo.atencion(especialistaId,servicioId);
         validarModalidad(atencion,modalidad);
         if(fecha.isBefore(LocalDate.now(reloj))) throw error(HttpStatus.BAD_REQUEST,"La fecha no puede ser pasada");
         List<Turno> resultado=new ArrayList<>();
         for(var franja:horarios.findByEspecialistaIdAndDiaOrderByDesdeAsc(especialistaId,fecha.getDayOfWeek())) {
+            if(franja.fecha!=null&&!franja.fecha.equals(fecha)) continue;
             LocalDateTime inicio=fecha.atTime(franja.desde);
             while(!inicio.plusMinutes(atencion.servicio().duracionMinutos()).isAfter(fecha.atTime(franja.hasta))) {
                 LocalDateTime fin=inicio.plusMinutes(atencion.servicio().duracionMinutos());
-                List<Reserva> ocupadas=solapadas(inicio,fin,null);
+                List<Reserva> ocupadas=solapadas(inicio,fin,reservaId);
                 boolean ocupado=ocupadas.stream().anyMatch(r->r.especialistaId.equals(especialistaId)
                     ||(cuenta.esPaciente()&&r.pacienteId.equals(cuenta.id())));
                 List<Box> libres=modalidad==Modalidad.PRESENCIAL?boxesLibres(ocupadas):List.of();
-                if(inicio.isAfter(LocalDateTime.now(reloj))&&!ocupado&&(modalidad==Modalidad.ONLINE||!libres.isEmpty()))
-                    resultado.add(new Turno(inicio,fin,libres.stream().map(b->new BoxDisponible(b.id,b.nombre)).toList()));
+                if(inicio.isAfter(LocalDateTime.now(reloj))&&agenda.admite(especialistaId,inicio,fin)&&!ocupado&&(modalidad==Modalidad.ONLINE||!libres.isEmpty()))
+                    resultado.add(new Turno(inicio,fin,libres.stream().map(b->new BoxDisponible(b.getId(),b.getNombre())).toList()));
+                if(franja.cupoPublicado)break;
                 inicio=inicio.plusMinutes(agenda.pasoMinutos());
             }
         }
-        return resultado;
+        return resultado.stream().collect(java.util.stream.Collectors.toMap(Turno::inicio,t->t,(a,b)->a,java.util.TreeMap::new)).values().stream().toList();
     }
 
     public Sugerencia sugerir(Long especialistaId,Long servicioId,Double latitud,Double longitud) {
@@ -147,8 +157,8 @@ public class ReservaService {
             if(cuenta.esPaciente()) throw error(HttpStatus.FORBIDDEN,"Solo el especialista o admin puede marcar la atención");
             if(reserva.fin.isAfter(LocalDateTime.now(reloj)))
                 throw error(HttpStatus.CONFLICT,"La sesión aún no ha terminado");
-        } else if(!reserva.inicio.isAfter(LocalDateTime.now(reloj))) {
-            throw error(HttpStatus.CONFLICT,"No se puede cancelar una sesión que ya comenzó");
+        } else if(reserva.inicio.isBefore(LocalDateTime.now(reloj).plusHours(12))) {
+            throw error(HttpStatus.CONFLICT,"La cancelación requiere al menos 12 horas de anticipación");
         }
         reserva.estado=estado;
         return respuesta(reservas.saveAndFlush(reserva));
@@ -160,8 +170,8 @@ public class ReservaService {
     }
     private List<Box> boxesLibres(List<Reserva> ocupadas) {
         Set<Long> ocupados=new HashSet<>();
-        ocupadas.stream().filter(r->r.box!=null).forEach(r->ocupados.add(r.box.id));
-        return boxes.findByActivoTrueOrderByIdAsc().stream().filter(b->!ocupados.contains(b.id)).toList();
+        ocupadas.stream().filter(r->r.box!=null).forEach(r->ocupados.add(r.box.getId()));
+        return boxes.findByActivoTrueOrderByIdAsc().stream().filter(b->!ocupados.contains(b.getId())).toList();
     }
     private void validarModalidad(CatalogoClient.Atencion atencion,Modalidad modalidad) {
         if((modalidad==Modalidad.ONLINE&&(!atencion.servicio().permiteOnline()||!atencion.especialista().permiteOnline()))

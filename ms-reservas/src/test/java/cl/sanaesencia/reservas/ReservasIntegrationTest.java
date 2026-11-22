@@ -44,10 +44,11 @@ class ReservasIntegrationTest {
     @Autowired ReservaRepository reservas;
     @Autowired HorarioRepository horarios;
     @Autowired BoxRepository boxes;
+    @Autowired jakarta.persistence.EntityManager entityManager;
     @MockitoBean UsuariosClient usuarios;
     @MockitoBean CatalogoClient catalogo;
     static final String FECHA="2026-11-23";
-    static final String AGENDA="{\"horarios\":[{\"dia\":\"MONDAY\",\"desde\":\"09:00\",\"hasta\":\"18:00\"}]}";
+    static final String AGENDA="{\"horarios\":[{\"dia\":\"MONDAY\",\"desde\":\"09:00\",\"hasta\":\"19:00\"}]}";
 
     CatalogoClient.Perfil perfil(Long id,boolean presencial,boolean online,boolean servicioOnline) {
         return new CatalogoClient.Perfil(id,"Profesional "+id,true,presencial,online,
@@ -91,6 +92,18 @@ class ReservasIntegrationTest {
                 .andExpect(status().isCreated()));
     }
 
+    @Test void reprogramacionExcluyeSoloLaPropiaReservaEnDisponibilidad() throws Exception {
+        agenda(101);
+        long id=reservar("p1@test.cl",101,"09:00","PRESENCIAL");
+        String ruta="/api/disponibilidad?especialistaId=101&servicioId=100&fecha="+FECHA+"&modalidad=PRESENCIAL&reservaId="+id;
+        llamada("p1@test.cl",HttpMethod.GET,ruta,"").andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].inicio").value(FECHA+"T09:00:00"))
+            .andExpect(jsonPath("$[1].inicio").value(FECHA+"T10:00:00"));
+        llamada("p2@test.cl",HttpMethod.GET,ruta,"").andExpect(status().isForbidden());
+        llamada("esp@test.cl",HttpMethod.GET,ruta,"").andExpect(status().isForbidden());
+        llamada("p1@test.cl",HttpMethod.DELETE,"/api/reservas/"+id,"").andExpect(status().isNoContent());
+        llamada("p1@test.cl",HttpMethod.GET,ruta,"").andExpect(status().isConflict());
+    }
     @Test void estadoEsPublicoYBoxesRequierenIdentidad() throws Exception {
         mvc.perform(get("/api/estado")).andExpect(status().isOk());
         mvc.perform(get("/api/boxes")).andExpect(status().isUnauthorized());
@@ -118,10 +131,27 @@ class ReservasIntegrationTest {
         assertNotNull(reservas.findById(presencial).orElseThrow().box);
     }
 
+    @Test void boxesCargadosDesdeBaseConservanIdentidadYNoSeAsignanDosVeces() throws Exception {
+        for(long e=101;e<=104;e++)agenda(e);
+        Set<Long> asignados=new HashSet<>();
+        for(int i=1;i<=3;i++) {
+            long reserva=reservar("p"+i+"@test.cl",100+i,"09:00","PRESENCIAL");
+            entityManager.flush(); entityManager.clear();
+            var respuesta=llamada("p"+i+"@test.cl",HttpMethod.GET,"/api/reservas/"+reserva,"")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.boxNombre").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+            asignados.add(((Number)JsonPath.read(respuesta,"$.boxId")).longValue());
+        }
+        assertEquals(3,asignados.size());
+        entityManager.clear();
+        llamada("p4@test.cl",HttpMethod.POST,"/api/reservas",crearJson(104,"09:00","PRESENCIAL"))
+            .andExpect(status().isConflict());
+    }
+
     @Test void rechazaCrucesDeEspecialistaYDePacienteAunqueCambieModalidad() throws Exception {
         agenda(101); agenda(102);
         reservar("p1@test.cl",101,"09:00","PRESENCIAL");
-        llamada("p2@test.cl",HttpMethod.POST,"/api/reservas",crearJson(101,"09:30","ONLINE"))
+        llamada("p2@test.cl",HttpMethod.POST,"/api/reservas",crearJson(101,"09:00","ONLINE"))
                 .andExpect(status().isConflict());
         llamada("p1@test.cl",HttpMethod.POST,"/api/reservas",crearJson(102,"09:00","ONLINE"))
                 .andExpect(status().isConflict());
@@ -188,11 +218,12 @@ class ReservasIntegrationTest {
         agenda(101);
         String ruta="/api/disponibilidad?especialistaId=101&servicioId=100&fecha="+FECHA+"&modalidad=PRESENCIAL";
         llamada("p1@test.cl",HttpMethod.GET,ruta,"").andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(17));
+                .andExpect(jsonPath("$.length()").value(10))
+                .andExpect(jsonPath("$[9].inicio").value(FECHA+"T18:00:00"));
         reservar("p1@test.cl",101,"09:00","PRESENCIAL");
         llamada("p2@test.cl",HttpMethod.GET,ruta,"").andExpect(jsonPath("$[0].inicio").value(FECHA+"T10:00:00"));
         llamada("p1@test.cl",HttpMethod.POST,"/api/reservas",crearJson(101,"17:30","ONLINE"))
-                .andExpect(status().isConflict());
+                .andExpect(status().isBadRequest());
     }
 
     @Test void agendaSoloSeGestionaPorSuEspecialistaOAdmin() throws Exception {
@@ -244,7 +275,7 @@ class ReservasIntegrationTest {
                 .andExpect(status().isBadRequest());
     }
 
-    @ParameterizedTest @ValueSource(strings={"08:00","09:15","18:00"})
+    @ParameterizedTest @ValueSource(strings={"08:00","09:15","09:30","19:00"})
     void rechazaHorasFueraDeAgendaOGrilla(String hora) throws Exception {
         agenda(101);
         llamada("p1@test.cl",HttpMethod.POST,"/api/reservas",crearJson(101,hora,"ONLINE"))
@@ -263,6 +294,60 @@ class ReservasIntegrationTest {
                 .andExpect(status().isConflict());
         llamada("p1@test.cl",HttpMethod.PATCH,"/api/reservas/"+id+"/estado","{\"estado\":\"CONFIRMADA\"}")
                 .andExpect(status().isConflict());
+    }
+
+    @Test void ultimaCitaIniciaALas18YTerminaALas19() throws Exception {
+        agenda(101);
+        long id=reservar("p1@test.cl",101,"18:00","PRESENCIAL");
+        assertEquals(LocalDateTime.parse(FECHA+"T19:00"),reservas.findById(id).orElseThrow().fin);
+    }
+
+    @ParameterizedTest @ValueSource(strings={"2026-11-28","2026-11-29"})
+    void noHayCitasEnFinDeSemanaNiConAgendaAntigua(String fecha) throws Exception {
+        Horario h=new Horario();h.especialistaId=101L;h.dia=LocalDate.parse(fecha).getDayOfWeek();h.desde=LocalTime.of(9,0);h.hasta=LocalTime.of(19,0);
+        horarios.saveAndFlush(h);
+        llamada("p1@test.cl",HttpMethod.GET,"/api/disponibilidad?especialistaId=101&servicioId=100&fecha="+fecha+"&modalidad=ONLINE","")
+            .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        llamada("p1@test.cl",HttpMethod.POST,"/api/reservas",crearJson(101,"09:00","ONLINE").replace(FECHA,fecha))
+            .andExpect(status().isConflict());
+    }
+
+    @Test void cancelacionRespetaLimiteInclusivoDe12Horas() throws Exception {
+        agenda(101);long id=reservar("p1@test.cl",101,"09:00","ONLINE");
+        Reserva r=reservas.findById(id).orElseThrow();
+        LocalDateTime ahora=LocalDateTime.of(2026,11,21,12,0);
+        r.inicio=ahora.plusHours(12).minusSeconds(1);r.fin=r.inicio.plusHours(1);reservas.saveAndFlush(r);
+        llamada("p1@test.cl",HttpMethod.DELETE,"/api/reservas/"+id,"").andExpect(status().isConflict());
+        assertEquals(EstadoReserva.CONFIRMADA,reservas.findById(id).orElseThrow().estado);
+        r.inicio=ahora.plusHours(12);r.fin=r.inicio.plusHours(1);reservas.saveAndFlush(r);
+        llamada("p1@test.cl",HttpMethod.DELETE,"/api/reservas/"+id,"").andExpect(status().isNoContent());
+    }
+
+    @Test void noPermitePublicarFranjaDeSabado() throws Exception {
+        llamada("admin@test.cl",HttpMethod.PUT,"/api/agenda/101",
+            "{\"horarios\":[{\"dia\":\"SATURDAY\",\"desde\":\"09:00\",\"hasta\":\"19:00\"}]}")
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test void franjaPublicadaPorFechaNoSeRepiteLaSemanaSiguiente() throws Exception {
+        llamada("admin@test.cl",HttpMethod.PUT,"/api/agenda/101",
+            "{\"horarios\":[{\"dia\":\"MONDAY\",\"desde\":\"16:00\",\"hasta\":\"19:00\",\"fecha\":\"2026-11-23\"}]}")
+            .andExpect(status().isOk()).andExpect(jsonPath("$[0].fecha").value(FECHA));
+        String ruta="/api/disponibilidad?especialistaId=101&servicioId=100&modalidad=ONLINE&fecha=";
+        llamada("p1@test.cl",HttpMethod.GET,ruta+FECHA,"").andExpect(jsonPath("$.length()").value(3));
+        llamada("p1@test.cl",HttpMethod.GET,ruta+"2026-11-30","").andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test void cuposPublicadosAdmitenSabadoYMinutosPeroNuncaCruzanReservas() throws Exception {
+        String cuerpo="{\"horarios\":[{\"dia\":\"SATURDAY\",\"desde\":\"18:40\",\"hasta\":\"19:40\",\"fecha\":\"2026-11-28\",\"cupoPublicado\":true},{\"dia\":\"SATURDAY\",\"desde\":\"19:20\",\"hasta\":\"20:20\",\"fecha\":\"2026-11-28\",\"cupoPublicado\":true}]}";
+        llamada("admin@test.cl",HttpMethod.PUT,"/api/agenda/101",cuerpo).andExpect(status().isOk());
+        String ruta="/api/disponibilidad?especialistaId=101&servicioId=100&modalidad=ONLINE&fecha=2026-11-28";
+        llamada("p1@test.cl",HttpMethod.GET,ruta,"").andExpect(jsonPath("$.length()").value(2));
+        llamada("p1@test.cl",HttpMethod.POST,"/api/reservas",crearJson(101,"18:40","ONLINE").replace(FECHA,"2026-11-28"))
+            .andExpect(status().isCreated());
+        llamada("p2@test.cl",HttpMethod.POST,"/api/reservas",crearJson(101,"19:20","ONLINE").replace(FECHA,"2026-11-28"))
+            .andExpect(status().isConflict());
+        llamada("p2@test.cl",HttpMethod.GET,ruta,"").andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test void erroresDeEntradaYDependenciasSonClaros() throws Exception {

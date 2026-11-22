@@ -9,4 +9,8 @@ public class Box {
     @Column(nullable=false) public boolean activo = true;
     public Box() {}
     public Box(String nombre) { this.nombre = nombre; }
+    public Long getId() { return id; }
+    public String getNombre() { return nombre; }
+    public String getDescripcion() { return descripcion; }
+    public boolean isActivo() { return activo; }
 }

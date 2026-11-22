@@ -9,7 +9,7 @@ public record ReservaResponse(Long id, Long pacienteId, String pacienteNombre, L
     public static ReservaResponse desde(Reserva r, double umbral) {
         return new ReservaResponse(r.id,r.pacienteId,r.pacienteNombre,r.especialistaId,r.especialistaNombre,
             r.servicioId,r.servicioNombre,r.precio,r.inicio,r.fin,r.modalidad,r.estado,
-            r.box==null?null:r.box.id,r.box==null?null:r.box.nombre,r.distanciaKm,
+            r.box==null?null:r.box.getId(),r.box==null?null:r.box.getNombre(),r.distanciaKm,
             r.onlineDisponible && r.distanciaKm!=null && r.distanciaKm>umbral);
     }
 }

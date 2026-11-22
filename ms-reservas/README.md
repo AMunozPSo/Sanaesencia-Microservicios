@@ -54,7 +54,7 @@ Para arrancar usuarios y catálogo en esta PC sin cambiar sus claves anteriores 
 
 Las coordenadas corresponden a las usadas en Android para Caupolicán 220, Los Vilos. La zona horaria de agenda es **America/Santiago** y el umbral de sugerencia online es **más de 20 km**.
 
-Los horarios de la API se envían como fecha y hora local del centro, sin offset: `2026-12-07T09:00:00`. No deben interpretarse como UTC. Los comienzos utilizan una grilla de 30 minutos; la duración y el precio se obtienen del catálogo.
+Los horarios de la API se envían como fecha y hora local del centro, sin offset: `2026-12-07T09:00:00`. No deben interpretarse como UTC. Las franjas semanales regulares utilizan una grilla de 60 minutos, de lunes a viernes entre 09:00 y 19:00 (último comienzo 18:00). Los cupos publicados con fecha conservan su comienzo exacto, incluso fuera de esa grilla. La duración y el precio se obtienen del catálogo.
 
 En desarrollo se usa `ddl-auto=update`. En AWS se deben configurar URLs, credenciales, conectividad y HTTPS, incluyendo la comunicación entre servicios cuando salga de la misma máquina. HTTP Basic envía credenciales en cada petición, por lo que HTTP se limita al entorno local.
 
@@ -105,7 +105,17 @@ No se inventan horarios para profesionales reales. Un administrador o el especia
 }
 ```
 
-Se aceptan varios bloques por día, sin superposición. Un cambio no puede dejar una reserva futura confirmada fuera de la agenda. Los días usan MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY y SUNDAY.
+Se aceptan varios bloques regulares por día, sin superposición. Un cambio no puede dejar una reserva futura confirmada fuera de la agenda. Los días usan MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY; los cupos publicados pueden incluir también SATURDAY y SUNDAY.
+
+### Cupos publicados con fecha
+
+`database/horarios-publicados-2026-11-22.json` contiene 120 comienzos observados para 15 profesionales reales y ocho perfiles sin disponibilidad pública consultable. No constituye el calendario completo del centro. La carga local conserva cada fecha; no inventa recurrencias semanales. Ejemplo de franja publicada:
+
+```json
+{"dia":"MONDAY","desde":"19:20","hasta":"20:20","fecha":"2026-11-23","cupoPublicado":true}
+```
+
+`cupoPublicado` exige una fecha cuyo día coincida con `dia`. Solo se ofrece el comienzo exacto de esa franja. Aunque dos comienzos publicados estén separados por menos de 60 minutos, una reserva confirmada bloquea cualquier sesión que se superponga. Estos cupos son una referencia copiada de la web, no una integración con Medilink; crear una cita aquí no agenda en el centro real. No se añadieron profesionales ficticios a la disponibilidad activa.
 
 ### Consultar disponibilidad
 
@@ -113,7 +123,7 @@ Se aceptan varios bloques por día, sin superposición. Un cambio no puede dejar
 /api/disponibilidad?especialistaId=2&servicioId=3&fecha=2026-12-07&modalidad=PRESENCIAL
 ```
 
-Reemplazar los IDs y la fecha por datos existentes. Cada turno devuelve `inicio`, `fin` y los boxes libres. En ONLINE no se requieren boxes. Para un paciente también se excluyen sus citas con otros especialistas.
+Reemplazar los IDs y la fecha por datos existentes. Cada turno devuelve `inicio`, `fin` y los boxes libres. En ONLINE no se requieren boxes. Para un paciente también se excluyen sus citas con otros especialistas. Al reprogramar, `reservaId` permite excluir únicamente la cita propia que se está editando, previa comprobación de permisos.
 
 ### Crear o reprogramar una reserva
 
@@ -137,7 +147,7 @@ El sistema sugiere online a más de 20 km únicamente si el servicio y el profes
 ### Estados
 
 - CONFIRMADA: ocupa el horario del especialista y paciente; si es presencial también ocupa un box.
-- CANCELADA: libera esos recursos y conserva el registro.
+- CANCELADA: libera esos recursos y conserva el registro. Solo se permite cancelar con al menos 12 horas de anticipación; el límite exacto de 12 horas se acepta.
 - ATENDIDA: solo especialista propio o ADMIN, cuando la sesión ya terminó.
 - Una reserva cancelada o atendida no se reactiva ni reprograma.
 
@@ -186,9 +196,13 @@ Al terminar cancela sus citas y desactiva los perfiles, servicio y cuentas ficti
 
 Las peticiones individuales usan `correo/password` como credenciales. Los IDs pertenecen a la API del catálogo y no se asume que coincidan con Room de Android.
 
-## Integración pendiente
+## Integración Android
 
-Este microservicio está listo para consumo HTTP, pero todavía falta conectar sus endpoints desde Android con Retrofit y completar el despliegue AWS. La API externa exigida en la evaluación se incorpora aparte; la comunicación entre estos tres servicios propios no la sustituye.
+Android consume estos endpoints con Retrofit para reservar, reprogramar, cancelar, consultar las agendas mensuales por rol, mostrar el box real y administrar boxes y horarios. Room conserva por separado las citas históricas anteriores. TrueWay mediante RapidAPI cubre la API externa; la comunicación entre microservicios propios no la sustituye. El despliegue AWS y el APK release firmado siguen pendientes.
+
+Verificación del 22/11/2026: `mvnw.cmd verify` pasó 40 pruebas sin fallos ni errores, incluyendo cancelación a 12 horas, exclusión de la propia reserva, fechas concretas, cupos publicados fuera de grilla y conflictos de recursos. Se comprueba también la lectura del box desde una sesión de persistencia nueva: se usan getters en las relaciones JPA para no leer campos vacíos de un proxy y para excluir correctamente los boxes ocupados.
+
+Desde Android pasó además una prueba con MySQL y los tres servicios: crear una cita presencial para Samantha Bastías, mostrar el box asignado, reprogramar a online conservando el ID, verla con una cuenta vinculada al mismo perfil y cancelarla liberando la disponibilidad. Las dos cuentas temporales quedaron desactivadas y las reservas de prueba CANCELADAS. No se realizaron citas en Medilink ni se modificó la cuenta personal de ningún profesional.
 
 ## Verificación del 21/11/2026
 

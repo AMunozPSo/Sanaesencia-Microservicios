@@ -11,7 +11,7 @@ import static cl.sanaesencia.reservas.service.ReglasAgenda.error;
 @Service
 public class BoxService {
     public record Respuesta(Long id,String nombre,String descripcion,boolean activo) {
-        static Respuesta desde(Box b) { return new Respuesta(b.id,b.nombre,b.descripcion,b.activo); }
+        static Respuesta desde(Box b) { return new Respuesta(b.getId(),b.getNombre(),b.getDescripcion(),b.isActivo()); }
     }
     private final BoxRepository boxes;
     private final ReservaRepository reservas;

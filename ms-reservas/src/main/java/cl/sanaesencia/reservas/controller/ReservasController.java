@@ -49,8 +49,9 @@ public class ReservasController {
     @GetMapping("/disponibilidad") public List<ReservaService.Turno> disponibilidad(
             @RequestParam("especialistaId") Long especialistaId,@RequestParam("servicioId") Long servicioId,
             @RequestParam("fecha") @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate fecha,
-            @RequestParam("modalidad") Modalidad modalidad,@AuthenticationPrincipal Cuenta cuenta) {
-        return reservas.disponibilidad(especialistaId,servicioId,fecha,modalidad,cuenta);
+            @RequestParam("modalidad") Modalidad modalidad,
+            @RequestParam(name="reservaId",required=false) Long reservaId,@AuthenticationPrincipal Cuenta cuenta) {
+        return reservas.disponibilidad(especialistaId,servicioId,fecha,modalidad,cuenta,reservaId);
     }
     @GetMapping("/ubicacion/sugerencia") public ReservaService.Sugerencia sugerir(
             @RequestParam("especialistaId") Long especialistaId,@RequestParam("servicioId") Long servicioId,

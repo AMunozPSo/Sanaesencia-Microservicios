@@ -1,0 +1,31 @@
+{
+  "consultadoEl": "2026-11-22",
+  "origen": "https://d9fd970e4b133fa31ffacc33ebef862de38162c9.agenda.softwaremedilink.com/agenda",
+  "alcance": "Cupos visibles de la primera semana con disponibilidad de cada profesional y sus días laborables consultables. No es una agenda completa ni una sincronización con Medilink. No se efectuaron reservas reales.",
+  "duracionProyectoMinutos": 60,
+  "agendas": [
+    {"especialistaId":29,"nombre":"Byron Sandoval","fechas":{},"nota":"Sin cupos visibles en la consulta realizada"},
+    {"especialistaId":30,"nombre":"Daniel Díaz","fechas":{"2026-11-23":["18:00","18:40","19:20"]}},
+    {"especialistaId":12,"nombre":"Francisca Villarroel","fechas":{"2026-11-28":["11:00","12:00","13:00"]}},
+    {"especialistaId":13,"nombre":"Janis Herrera","fechas":{"2026-11-28":["10:00","11:00","12:00","13:00","14:00"]}},
+    {"especialistaId":2,"nombre":"Dra. Keilen Sánchez Ríos","fechas":{"2026-11-25":["15:00","15:30","16:00","16:30"],"2026-11-27":["15:00","15:30"]}},
+    {"especialistaId":21,"nombre":"Macarena González","fechas":{"2026-11-24":["17:50","18:35","19:20"]}},
+    {"especialistaId":28,"nombre":"Maria Ignacia","fechas":{"2026-11-24":["10:20","11:00"],"2026-11-25":["11:00","16:20"],"2026-11-26":["10:20","11:40"]}},
+    {"especialistaId":10,"nombre":"María José Mendicoa","fechas":{"2026-11-23":["16:00","17:00"],"2026-11-24":["16:00","17:00"],"2026-11-25":["16:00","17:00","18:00","19:00"],"2026-11-26":["16:00","19:00"]}},
+    {"especialistaId":22,"nombre":"Natalia Ortiz","fechas":{"2026-11-26":["10:00","11:00","12:00","15:00","16:00"]}},
+    {"especialistaId":17,"nombre":"Pamela Vergara","fechas":{"2026-12-12":["11:00","12:00","13:00"]}},
+    {"especialistaId":4,"nombre":"Samantha Bastías","fechas":{"2026-11-23":["16:00","17:00","18:00","19:00"],"2026-11-24":["16:00","17:00"],"2026-11-27":["10:00","11:00","12:00"]}},
+    {"especialistaId":18,"nombre":"Sebastián Acuña","fechas":{"2026-11-27":["19:00"]}},
+    {"especialistaId":5,"nombre":"Sebastián Olivares","fechas":{"2026-11-27":["18:00","19:00"]}},
+    {"especialistaId":19,"nombre":"Yanari Ramírez","fechas":{"2026-11-23":["10:00","12:00"],"2026-11-24":["11:00","12:00"],"2026-11-25":["10:00","11:00","12:00"],"2026-11-26":["10:00","11:00","12:00"],"2026-11-27":["10:00","11:00","12:00"]}},
+    {"especialistaId":9,"nombre":"Yanira Ferreira","fechas":{"2026-11-24":["11:00","12:00","13:00","14:00","15:00"],"2026-11-25":["10:00","12:00","15:00"],"2026-11-26":["15:00","17:00"],"2026-11-27":["10:00"]}},
+    {"especialistaId":11,"nombre":"Camila Soto","fechas":{"2026-11-23":["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00"],"2026-11-24":["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00"],"2026-11-25":["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00"],"2026-11-26":["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00"],"2026-11-27":["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00"]}},
+    {"especialistaId":3,"nombre":"Dra. Camila Tabilo","fechas":{},"nota":"No hay servicios agendables publicados en las modalidades consultadas"},
+    {"especialistaId":16,"nombre":"Jeaseth Alam","fechas":{},"nota":"No aparece una agenda pública consultable"},
+    {"especialistaId":20,"nombre":"Natalia Rojas","fechas":{},"nota":"No aparece una agenda pública consultable"},
+    {"especialistaId":25,"nombre":"Catalina Cobs","fechas":{},"nota":"No aparece una agenda pública consultable"},
+    {"especialistaId":26,"nombre":"Betzabé Codoceo","fechas":{},"nota":"No aparece una agenda pública consultable"},
+    {"especialistaId":27,"nombre":"Carolina Vega B.","fechas":{},"nota":"No aparece una agenda pública consultable"},
+    {"especialistaId":31,"nombre":"Carmen Paz Astudillo","fechas":{},"nota":"La página deriva la consulta a WhatsApp; no se contactó al centro"}
+  ]
+}

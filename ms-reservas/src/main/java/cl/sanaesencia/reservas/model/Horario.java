@@ -8,4 +8,6 @@ public class Horario {
     @Enumerated(EnumType.STRING) @Column(nullable=false, length=12) public DayOfWeek dia;
     @Column(nullable=false) public LocalTime desde;
     @Column(nullable=false) public LocalTime hasta;
+    public LocalDate fecha;
+    @Column(nullable=false) public boolean cupoPublicado;
 }
