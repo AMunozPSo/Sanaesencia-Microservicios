@@ -82,6 +82,7 @@ El filtro autentica contra usuarios, comprueba el estado de la cuenta y obtiene 
 | PUT | /api/agenda/{especialistaId} | Reemplazar horario; propietario especialista o ADMIN |
 | GET | /api/disponibilidad | Turnos disponibles para fecha, servicio, perfil y modalidad |
 | GET | /api/ubicacion/sugerencia | Distancia y modalidades posibles |
+| POST | /api/rutas/sede | Recorrido TrueWay a la sede; requiere cuenta activa |
 | POST | /api/reservas | Reservar como paciente autenticado |
 | GET | /api/reservas?mes=yyyy-MM | Citas propias; especialista ve su perfil; ADMIN ve todas |
 | GET | /api/reservas/{id} | Detalle con comprobación de pertenencia |
@@ -155,7 +156,15 @@ El sistema sugiere online a más de 20 km únicamente si el servicio y el profes
 
 Al iniciar una base vacía se crean Box 1, Box 2 y Box 3. Se asigna aleatoriamente uno de los boxes libres. El administrador puede agregar otros. Un box no puede desactivarse mientras tenga reservas pendientes.
 
-## Concurrencia
+## Clave de RapidAPI en el servidor
+
+Android ya no incluye `TRUEWAY_API_KEY` ni llama directamente al proveedor. Envía `POST /api/rutas/sede` con `{ "latitud": -31.9, "longitud": -71.5 }` y Basic Auth de SanaEsencia. El servidor valida la ubicación y usa el destino fijo del centro. La respuesta contiene únicamente `route.distance` y `route.duration`.
+
+La clave se configura como variable `TRUEWAY_API_KEY` en `/etc/sanaesencia/reservas.env`, con permisos 600 en AWS. El cliente dedicado `TrueWayClient` envía únicamente esa clave y el host al proveedor, nunca la autorización del paciente. Las coordenadas se envían en el body hacia SanaEsencia para no incluirlas en la URL del registro de acceso de Nginx; este endpoint no las guarda en MySQL. Las respuestas llevan Cache-Control: no-store.
+
+`LimiteRecorridos` permite por defecto cinco intentos por cuenta/minuto y 400 intentos globales por día UTC. Es un contador en memoria para la instancia única del proyecto; se reinicia con el proceso y no es una cuota distribuida. La cuota real de RapidAPI sigue aplicando. Los fallos del proveedor no exponen su cuerpo ni la clave al cliente.
+
+## Concurrencia de reservas
 
 Todas las escrituras de reservas, agendas y boxes adquieren un bloqueo pesimista sobre una fila común de MySQL (`bloqueo_agenda`) dentro de la misma transacción.
 
